@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Chat</title>
+
+    <!-- Include Bootstrap CSS -->
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+
+        #chat-container {
+            background-color: #ffffff;
+        }
+
+        #chat_messages {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .chat-box {
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #f8f9fa;
+            transition: background-color 0.3s ease-in-out;
+            word-wrap: break-word;
+        }
+
+        .chat-box:hover {
+            background-color: #f0f0f0;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .btn-file {
+            display: inline-block;
+        }
+
+        .btn-voice {
+            display: inline-block;
+        }
+
+        .animate__animated {
+            animation-duration: 0.5s;
+        }
+
+        .animate__fadeInUp {
+            animation-name: fadeInUp;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translate3d(0, 100%, 0);
+            }
+            to {
+                opacity: 1;
+                transform: translate3d(0, 0, 0);
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-6 offset-md-3">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    WebSocket Chat
+                </div>
+                <div class="card-body" id="chat-container">
+                    <div id="chat_messages" class="mb-3"></div>
+                    <div class="input-group mb-3">
+                        <input id="messageInput" type="text" class="form-control" placeholder="Type your message...">
+                        <div class="input-group-append">
+                            <button id="sendButton" class="btn btn-primary">Send</button>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <div class="custom-file">
+                            <input type="file" class="custom-file-input" id="fileInput">
+                            <label class="custom-file-label" for="fileInput">Choose file</label>
+                        </div>
+                        <div class="input-group-append">
+                            <button class="btn btn-secondary btn-file">Send File</button>
+                        </div>
+                    </div>
+                    <br>
+                    <button id="startRecordingButton" class="btn btn-success btn-voice">
+                        <i class="fa fa-microphone"></i> Start
+                    </button>
+                    <button id="stopRecordingButton" class="btn btn-danger btn-voice">
+                        <i class="fa fa-stop"></i> Stop
+                    </button>
+                    <button id="sendVoiceButton" class="btn btn-secondary btn-voice">
+                        <i class="fa fa-paper-plane"></i> Send Voice
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include Bootstrap JS and WebSocket logic -->
+<!-- Include Bootstrap JS and WebSocket logic -->
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+<script>
+    const socket = new WebSocket("ws://localhost:8001/ws");
+    const chatMessages = document.getElementById("chat_messages");
+    const messageInput = document.getElementById("messageInput");
+    const fileInput = document.getElementById("fileInput");
+    const sendButton = document.getElementById("sendButton");
+    const sendFileButton = document.querySelector(".btn-file");
+    const startRecordingButton = document.getElementById("startRecordingButton");
+    const stopRecordingButton = document.getElementById("stopRecordingButton");
+    const sendVoiceButton = document.getElementById("sendVoiceButton");
+    const audioContainer = document.getElementById("audioContainer");
+
+    let mediaRecorder;
+    let recordedChunks = [];
+
+    startRecordingButton.addEventListener("click", async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                recordedChunks.push(event.data);
+            }
+        };
+        mediaRecorder.start();
+    });
+
+    stopRecordingButton.addEventListener("click", () => {
+        if (mediaRecorder.state === "recording") {
+            mediaRecorder.stop();
+        }
+    });
+
+    sendVoiceButton.addEventListener("click", () => {
+        if (recordedChunks.length > 0) {
+            const blob = new Blob(recordedChunks, {type: "audio/webm"});
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const audioData = event.target.result;
+                socket.send(audioData);
+            };
+            reader.readAsDataURL(blob);
+            recordedChunks = [];
+        }
+    });
+
+    socket.onmessage = (event) => {
+        const message = event.data;
+        if (message.toString().startsWith("data:image/png;base64,")) {
+            imgData = `<img src="${message}" style="max-width: 300px; width: 100%;"/>`
+            chatMessages.innerHTML += `<div class="chat-box animate__animated animate__fadeInUp">${imgData}</div>`;
+        } else if (message.toString().startsWith("data:audio/webm;base64,")) {
+            const audioData = message.replace("data:audio/webm;base64,", "");
+            playAudio(audioData);
+        } else {
+            chatMessages.innerHTML += `<div class="chat-box animate__animated animate__fadeInUp">${message}</div>`;
+        }
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    };
+
+    sendButton.addEventListener("click", () => {
+        const message = messageInput.value;
+        if (message) {
+            socket.send(message);
+            messageInput.value = "";
+        }
+    });
+
+    sendFileButton.addEventListener("click", () => {
+        fileInput.click();
+    });
+
+    fileInput.addEventListener("change", () => {
+        const selectedFile = fileInput.files[0];
+        if (selectedFile) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const fileData = event.target.result;
+                socket.send(fileData);
+            };
+            reader.readAsDataURL(selectedFile);
+            fileInput.value = '';
+        }
+    });
+
+    function playAudio(data) {
+        const audio = new Audio();
+        audio.src = "data:audio/webm;base64," + data;
+        audio.controls = true;
+        const audioContainer = document.createElement("div");
+        audioContainer.appendChild(audio);
+        chatMessages.appendChild(audioContainer);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+</script>
+</body>
+</html>

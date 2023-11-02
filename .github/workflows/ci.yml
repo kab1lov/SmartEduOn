@@ -1,0 +1,25 @@
+name: SmartEduON CI
+
+on: [push]
+
+jobs:
+  run-test:
+    services:
+      postgres:
+        image: postgres:14.8
+        env:
+          POSTGRES_DB: SmartEduON
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 1
+        ports:
+          - 5432:5432
+    runs-on: ubuntu-latest
+    env:
+      DJANGO_SETTINGS_MODULE: root.settings
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.11.6
+      - name: requirements
+        run: pip3 install -r requirements.txt
